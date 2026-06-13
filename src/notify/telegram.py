@@ -81,3 +81,34 @@ def format_daily_brief(rows: list[dict], fng: int | None) -> str:
     lines.append("")
     lines.append("_Research only, not financial advice._")
     return "\n".join(lines)
+
+
+def format_eod_reminder(rows: list) -> str:
+    """Render the end-of-day close reminder from open (coin, direction, entry, sl, tp) rows."""
+    lines = ["*EOD reminder* — open intraday positions to close before day end:", ""]
+    for coin, direction, entry, _sl, _tp in rows:
+        lines.append(f"• {coin} {direction}  (entry `{float(entry):,.2f}`)")
+    lines.append("")
+    lines.append("_Intraday positions should be closed same day. Not financial advice._")
+    return "\n".join(lines)
+
+
+def format_digest(summary: dict) -> str:
+    """Render the weekly performance digest from analytics.compute() output."""
+    o = summary["overall"]
+    if not o["trades"]:
+        return "*Weekly performance digest*\nNo graded trades yet."
+    lines = [
+        "*Weekly performance digest*",
+        f"Trades: {o['trades']}  ·  Win rate: {o['win_rate'] * 100:.0f}%",
+        f"Expectancy: ${o['expectancy_usd']:.2f}  ({o['expectancy_r']:+.2f}R)",
+        f"Total PnL: ${o['total_usd']:.2f}  ·  Max drawdown: ${o['max_drawdown_usd']:.2f}",
+        "",
+        "By direction:",
+    ]
+    for direction, st in summary["by_direction"].items():
+        lines.append(f"  {direction}: {st['trades']} trades, "
+                     f"{st['win_rate'] * 100:.0f}% win, {st['expectancy_r']:+.2f}R")
+    lines.append("")
+    lines.append("_Research only, not financial advice._")
+    return "\n".join(lines)

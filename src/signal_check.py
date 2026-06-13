@@ -3,8 +3,11 @@
 For each coin on the signal timeframe: load the latest feature snapshot, dedup against
 already-decided candles, score with the rule engine, optionally confirm with the active ML
 model (Phase 4 — a no-op until a model is promoted), size LONG/SHORT with the liquidation
-guard, persist to the signals table, and push a Telegram card for tradeable signals. FLAT,
-ML-vetoed, and risk-rejected setups are logged (status SKIPPED) with no card.
+guard, persist to the signals table, and push a Telegram card for tradeable signals.
+
+Phase 5 hardening: a kill-switch halts all emission, and a per-UTC-day cap limits how many
+tradeable signals are issued. FLAT, ML-vetoed, capped, and risk-rejected setups are logged
+(status SKIPPED) with no card.
 
     python -m src.signal_check
 """
@@ -26,6 +29,8 @@ ML_LONG_MIN = 0.45      # veto a LONG if P falls below this
 ML_SHORT_MAX = 0.55     # veto a SHORT if P rises above this
 
 _EXISTS = "SELECT 1 FROM signals WHERE coin = %s AND ts = %s LIMIT 1"
+_COUNT_TODAY = ("SELECT count(*) FROM signals WHERE direction IN ('LONG', 'SHORT') "
+                "AND created_at >= date_trunc('day', now())")
 _INSERT = """
     INSERT INTO signals
         (coin, ts, direction, entry, tp, sl, leverage, size_usd, rule_score, model_version, status)
@@ -35,9 +40,16 @@ _INSERT = """
 
 def run() -> int:
     """Evaluate every coin and emit signals. Returns the number of tradeable cards sent."""
+    if config.KILL_SWITCH:
+        logger.warning("KILL_SWITCH active — no signals emitted this run")
+        return 0
+
     cards: list[str] = []
     with db.connect() as conn:
         with conn.cursor() as cur:
+            cur.execute(_COUNT_TODAY)
+            emitted_today = cur.fetchone()[0]
+
             for coin in config.COINS:
                 loaded = load_latest(cur, coin, config.SIGNAL_TIMEFRAME)
                 if loaded is None:
@@ -81,9 +93,17 @@ def run() -> int:
                     logger.info("%s %s rejected: %s", coin, decision.direction, sized.reason)
                     continue
 
+                if emitted_today >= config.MAX_SIGNALS_PER_DAY:
+                    cur.execute(_INSERT, (coin, ts, decision.direction, snap.close, None, None,
+                                          None, None, decision.score, model_version, "SKIPPED"))
+                    logger.info("%s %s skipped: daily cap %d reached", coin, decision.direction,
+                                config.MAX_SIGNALS_PER_DAY)
+                    continue
+
                 cur.execute(_INSERT, (coin, ts, decision.direction, sized.entry, sized.take_profit,
                                       sized.stop_loss, sized.leverage, sized.margin_usd,
                                       decision.score, model_version, "OPEN"))
+                emitted_today += 1
                 cards.append(telegram.format_signal_card(coin, decision, sized, ml_p))
                 logger.info("%s %s @ %.2f (score %.2f, %.0fx, ml=%s)", coin, decision.direction,
                             sized.entry, decision.score, sized.leverage,

@@ -1,20 +1,17 @@
-name: collect
+name: digest
 
-# Ingest recent closed candles into Neon every 15 minutes.
-# GitHub Actions cron is UTC and can drift a few minutes — fine for intraday.
-# Scheduled workflows run only on the default branch.
+# Weekly performance digest, Mondays 00:30 UTC (08:30 MYT).
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "30 0 * * 1"
   workflow_dispatch:
 
-# Don't let a slow run overlap the next scheduled one.
 concurrency:
-  group: collect
+  group: digest
   cancel-in-progress: false
 
 jobs:
-  collect:
+  digest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,11 +24,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Ingest candles
+      - name: Send weekly digest
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          KILL_SWITCH: ${{ vars.KILL_SWITCH }}
-          MAX_SIGNALS_PER_DAY: ${{ vars.MAX_SIGNALS_PER_DAY }}
-        run: python -m src.collect
+        run: python -m src.digest

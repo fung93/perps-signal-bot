@@ -29,6 +29,20 @@ MAX_LEVERAGE: int = 5
 MAX_NOTIONAL_USD: float = MARGIN_USD * MAX_LEVERAGE  # $500
 
 
+# --- Operational controls (Phase 5 hardening) ---
+def _flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    return int(raw) if raw else default
+
+
+KILL_SWITCH: bool = _flag("KILL_SWITCH")               # when true, emit no signals at all
+MAX_SIGNALS_PER_DAY: int = _int_env("MAX_SIGNALS_PER_DAY", 3)  # cap tradeable signals / UTC day
+
+
 def require_env(name: str) -> str:
     """Return a required environment variable, or raise with a clear message."""
     value = os.environ.get(name)
