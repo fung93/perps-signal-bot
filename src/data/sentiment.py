@@ -38,8 +38,8 @@ def latest_fear_greed() -> int | None:
 def funding_oi(coin: str) -> tuple[float | None, float | None]:
     """Funding rate and open interest for ``coin``'s Katana perp (via :mod:`src.data.katana`).
 
-    Returns ``(None, None)`` when ``KATANA_API_BASE`` is unset or the request fails — the
-    features table tolerates NULL and the rule engine treats funding as neutral. (Binance
-    futures is geo-blocked from dev + US CI, so it is not a usable proxy.)
+    Sourced from Katana's mainnet perps REST (override the host via ``KATANA_API_BASE``).
+    Returns ``(None, None)`` if the request fails — the features table tolerates NULL and
+    the rule engine treats funding as neutral.
     """
     return katana.fetch_funding_oi(coin)

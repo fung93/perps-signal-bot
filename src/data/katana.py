@@ -1,14 +1,15 @@
 """Katana perps market data — funding rate and open interest.
 
-Katana's perpetuals are powered by Vertex. This reads per-market tickers over HTTP so the
-bot can use them in CI (the Katana MCP is only available to interactive tooling, not the
-unattended workflows). Set ``KATANA_API_BASE`` to the perps REST host; if it is unset or a
-request fails, callers get ``(None, None)`` and the pipeline runs without funding/OI — the
+Katana's perpetuals are powered by Vertex and exposed at a public REST API. This reads
+per-market tickers over HTTP so the bot can use them in CI (the Katana MCP is only
+available to interactive tooling, not the unattended workflows). Defaults to the mainnet
+host; override with ``KATANA_API_BASE`` (e.g. the sandbox/testnet host). If a request
+fails, callers get ``(None, None)`` and the pipeline runs without funding/OI — the
 features table tolerates NULL and the rule engine treats funding as neutral.
 
-Gateways differ in JSON style (camelCase ``currentFundingRate``/``openInterest`` or
-snake_case ``funding_rate``/``open_interest``; a list or a symbol-keyed dict). All are
-handled, and the tickers payload is fetched once per process.
+The tickers endpoint returns a list of objects with camelCase fields
+(``currentFundingRate``, ``openInterest``); snake_case and symbol-keyed dict shapes are
+handled too for resilience. The payload is fetched once per process.
 """
 from __future__ import annotations
 
@@ -20,7 +21,10 @@ from .. import config
 
 logger = logging.getLogger(__name__)
 
-_TICKERS_PATH = "/v2/tickers"
+# Katana perps REST (Vertex-powered). Mainnet by default; override via KATANA_API_BASE
+# (sandbox/testnet host is https://api-perps-sandbox.katana.network).
+_DEFAULT_BASE = "https://api-perps.katana.network"
+_TICKERS_PATH = "/v1/tickers"
 _TIMEOUT_SECONDS = 15
 
 # Canonical coin -> Katana perp market symbol.
@@ -31,14 +35,11 @@ _tickers_cache = _UNSET   # tickers payload, cached for the process (one fetch p
 
 
 def _fetch_tickers():
-    """GET the tickers payload once. None if no base URL is set or the request fails."""
+    """GET the tickers payload once per process. None if the request fails."""
     global _tickers_cache
     if _tickers_cache is not _UNSET:
         return _tickers_cache
-    base = config.get_env("KATANA_API_BASE")
-    if not base:
-        _tickers_cache = None
-        return None
+    base = config.get_env("KATANA_API_BASE") or _DEFAULT_BASE
     try:
         resp = requests.get(f"{base.rstrip('/')}{_TICKERS_PATH}", timeout=_TIMEOUT_SECONDS)
         resp.raise_for_status()
