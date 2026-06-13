@@ -8,6 +8,8 @@ so the dependency is optional.
 from __future__ import annotations
 
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # Optional local convenience: load .env if python-dotenv is present. No-op otherwise.
 try:
@@ -40,7 +42,20 @@ def _int_env(name: str, default: int) -> int:
 
 
 KILL_SWITCH: bool = _flag("KILL_SWITCH")               # when true, emit no signals at all
-MAX_SIGNALS_PER_DAY: int = _int_env("MAX_SIGNALS_PER_DAY", 3)  # cap tradeable signals / UTC day
+MAX_SIGNALS_PER_DAY: int = _int_env("MAX_SIGNALS_PER_DAY", 3)  # cap tradeable signals / day
+
+
+# --- Active hours (local time): only emit signals while you're around to act ---
+LOCAL_TZ: str = "Asia/Kuala_Lumpur"
+ACTIVE_HOUR_START: int = 8     # inclusive — 08:00 local
+ACTIVE_HOUR_END: int = 22      # exclusive — 22:00 local
+
+
+def in_active_hours(now: datetime | None = None) -> bool:
+    """True if the current (or given) time falls within the local active window."""
+    tz = ZoneInfo(LOCAL_TZ)
+    moment = now.astimezone(tz) if now else datetime.now(tz)
+    return ACTIVE_HOUR_START <= moment.hour < ACTIVE_HOUR_END
 
 
 def require_env(name: str) -> str:

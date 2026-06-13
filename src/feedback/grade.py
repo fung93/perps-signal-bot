@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from .. import config, db
 from ..signals.rules import LONG
@@ -33,9 +34,12 @@ _SET_STATUS = "UPDATE signals SET status = %s WHERE id = %s"
 
 
 def _eod(ts: datetime) -> datetime:
-    """Next UTC midnight after ts — the intraday close boundary."""
-    day = ts.astimezone(timezone.utc).date()
-    return datetime(day.year, day.month, day.day, tzinfo=timezone.utc) + timedelta(days=1)
+    """End of the local active day (config.ACTIVE_HOUR_END) for ts — the close boundary."""
+    local = ts.astimezone(ZoneInfo(config.LOCAL_TZ))
+    end = local.replace(hour=config.ACTIVE_HOUR_END, minute=0, second=0, microsecond=0)
+    if local.hour >= config.ACTIVE_HOUR_END:
+        end += timedelta(days=1)
+    return end.astimezone(timezone.utc)
 
 
 def _resolve(direction, entry, tp, sl, fwd, day_over):

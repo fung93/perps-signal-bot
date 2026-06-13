@@ -44,6 +44,11 @@ def run() -> int:
         logger.warning("KILL_SWITCH active — no signals emitted this run")
         return 0
 
+    if not config.in_active_hours():
+        logger.info("outside active hours (%s %02d:00-%02d:00) — no signals emitted",
+                    config.LOCAL_TZ, config.ACTIVE_HOUR_START, config.ACTIVE_HOUR_END)
+        return 0
+
     cards: list[str] = []
     with db.connect() as conn:
         with conn.cursor() as cur:
