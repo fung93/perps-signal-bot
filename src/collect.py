@@ -1,17 +1,16 @@
-"""Collector entrypoint — ingest recent closed candles, then compute features.
+"""Collector entrypoint — ingest candles, compute features, run the signal check.
 
 Run by ``collect.yml`` every 15 minutes (and locally for testing):
 
     python -m src.collect
 
-Ingests Binance candles (Phase 1) then computes indicator + sentiment features into the
-features table (Phase 2). Phase 3 will extend this run with the signal check.
+Phase 1 ingests Binance candles; Phase 2 computes features; Phase 3 runs the signal check.
 """
 from __future__ import annotations
 
 import logging
 
-from . import config, db, features
+from . import config, db, features, signal_check
 from .data import binance
 
 logger = logging.getLogger(__name__)
@@ -64,6 +63,7 @@ def main() -> int:
     try:
         ingest()
         features.build()
+        signal_check.run()
     except Exception:
         logger.exception("collect run failed")
         return 1

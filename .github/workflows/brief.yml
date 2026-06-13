@@ -1,20 +1,17 @@
-name: collect
+name: brief
 
-# Ingest recent closed candles into Neon every 15 minutes.
-# GitHub Actions cron is UTC and can drift a few minutes — fine for intraday.
-# Scheduled workflows run only on the default branch.
+# Daily market brief at 08:00 MYT (= 00:00 UTC). Actions cron is UTC and can drift.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
-# Don't let a slow run overlap the next scheduled one.
 concurrency:
-  group: collect
+  group: brief
   cancel-in-progress: false
 
 jobs:
-  collect:
+  brief:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,9 +24,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Ingest candles
+      - name: Send daily brief
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python -m src.collect
+        run: python -m src.brief

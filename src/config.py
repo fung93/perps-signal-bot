@@ -21,6 +21,7 @@ except ModuleNotFoundError:
 # --- Project scope (locked: BTC / ETH / SOL, intraday) ---
 COINS: tuple[str, ...] = ("BTC", "ETH", "SOL")
 TIMEFRAMES: tuple[str, ...] = ("15m", "1h", "4h")
+SIGNAL_TIMEFRAME: str = "1h"   # timeframe the rule engine evaluates for entries
 
 # --- Risk envelope (hard rules — see CLAUDE.md) ---
 MARGIN_USD: float = 100.0
