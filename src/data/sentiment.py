@@ -10,6 +10,8 @@ from datetime import date, datetime, timezone
 
 import requests
 
+from . import katana
+
 logger = logging.getLogger(__name__)
 
 _FNG_URL = "https://api.alternative.me/fng/"
@@ -34,11 +36,10 @@ def latest_fear_greed() -> int | None:
 
 
 def funding_oi(coin: str) -> tuple[float | None, float | None]:
-    """Funding rate and open interest for ``coin``'s perp — ``(None, None)`` until wired.
+    """Funding rate and open interest for ``coin``'s Katana perp (via :mod:`src.data.katana`).
 
-    The faithful source is Katana's perps API (the venue actually traded). Binance futures
-    (fapi.binance.com) is geo-blocked from both the dev network here and US-based CI
-    runners, so it is not usable as a proxy. The features table tolerates NULL funding/oi,
-    so the pipeline runs without them in the meantime.
+    Returns ``(None, None)`` when ``KATANA_API_BASE`` is unset or the request fails — the
+    features table tolerates NULL and the rule engine treats funding as neutral. (Binance
+    futures is geo-blocked from dev + US CI, so it is not a usable proxy.)
     """
-    return None, None
+    return katana.fetch_funding_oi(coin)

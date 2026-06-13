@@ -1,0 +1,30 @@
+name: prune
+
+# Trim the candles table to its rolling window daily (storage discipline).
+on:
+  schedule:
+    - cron: "0 3 * * *"   # daily 03:00 UTC (11:00 MYT)
+  workflow_dispatch:
+
+concurrency:
+  group: prune
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prune old candles
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python -m src.prune

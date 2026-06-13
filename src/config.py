@@ -43,6 +43,7 @@ def _int_env(name: str, default: int) -> int:
 
 KILL_SWITCH: bool = _flag("KILL_SWITCH")               # when true, emit no signals at all
 MAX_SIGNALS_PER_DAY: int = _int_env("MAX_SIGNALS_PER_DAY", 3)  # cap tradeable signals / day
+CANDLE_RETENTION_DAYS: int = _int_env("CANDLE_RETENTION_DAYS", 90)  # candles rolling window (prune.py)
 
 
 # --- Active hours (local time): only emit signals while you're around to act ---

@@ -34,4 +34,5 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           KILL_SWITCH: ${{ vars.KILL_SWITCH }}
           MAX_SIGNALS_PER_DAY: ${{ vars.MAX_SIGNALS_PER_DAY }}
+          KATANA_API_BASE: ${{ vars.KATANA_API_BASE }}
         run: python -m src.collect
