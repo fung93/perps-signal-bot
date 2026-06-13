@@ -1,0 +1,31 @@
+name: retune
+
+# Weekly walk-forward retrain + promotion gate (Sundays 02:00 UTC). A new model goes live
+# only if it beats the incumbent out-of-sample; otherwise it is recorded and discarded.
+on:
+  schedule:
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: retune
+  cancel-in-progress: false
+
+jobs:
+  retune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Walk-forward retrain + promotion gate
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python -m src.signals.ml.train

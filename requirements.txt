@@ -14,4 +14,4 @@ requests>=2.31,<3            # Telegram Bot API + HTTP data feeds
 pandas>=2.2,<3
 
 # Phase 4 — ML classifier (gated behind walk-forward OOS test)
-# lightgbm>=4.3,<5
+lightgbm>=4.3,<5

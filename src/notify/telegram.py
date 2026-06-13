@@ -48,9 +48,10 @@ def send_message(
     return resp.json()
 
 
-def format_signal_card(coin: str, decision, sizing) -> str:
-    """Render a tradeable signal as a Telegram card (``decision`` and ``sizing`` results)."""
+def format_signal_card(coin: str, decision, sizing, ml_p: float | None = None) -> str:
+    """Render a tradeable signal as a Telegram card (``decision``/``sizing`` results)."""
     side = "🟢 LONG" if decision.direction == "LONG" else "🔴 SHORT"
+    ml_line = f"ML P(profit): {ml_p * 100:.0f}%\n" if ml_p is not None else ""
     return (
         f"*{coin} · {side}*  ({config.SIGNAL_TIMEFRAME})\n"
         f"Entry: `{sizing.entry:,.2f}`\n"
@@ -59,6 +60,7 @@ def format_signal_card(coin: str, decision, sizing) -> str:
         f"(notional ${sizing.notional_usd:,.0f})\n"
         f"Risk if stopped: ${sizing.risk_usd:,.2f}\n"
         f"_Why:_ {decision.rationale} (score {decision.score:+.1f})\n"
+        f"{ml_line}"
         f"⏱ Intraday — close by EOD. Research signal, not financial advice."
     )
 
