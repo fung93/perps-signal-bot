@@ -30,7 +30,7 @@ ML_SHORT_MAX = 0.55     # veto a SHORT if P rises above this
 
 _EXISTS = "SELECT 1 FROM signals WHERE coin = %s AND ts = %s LIMIT 1"
 _COUNT_TODAY = ("SELECT count(*) FROM signals WHERE direction IN ('LONG', 'SHORT') "
-                "AND created_at >= date_trunc('day', now())")
+                "AND status <> 'SKIPPED' AND created_at >= date_trunc('day', now())")
 _INSERT = """
     INSERT INTO signals
         (coin, ts, direction, entry, tp, sl, leverage, size_usd, rule_score, model_version, status)
