@@ -1,0 +1,3 @@
+# Store text files with LF in the repo so Linux CI (GitHub Actions) sees consistent
+# line endings, regardless of the Windows working copy.
+* text=auto eol=lf

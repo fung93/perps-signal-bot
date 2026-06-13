@@ -1,0 +1,33 @@
+name: collect
+
+# Ingest recent closed candles into Neon every 15 minutes.
+# GitHub Actions cron is UTC and can drift a few minutes — fine for intraday.
+# Scheduled workflows run only on the default branch.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+# Don't let a slow run overlap the next scheduled one.
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Ingest candles
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python -m src.collect

@@ -1,0 +1,22 @@
+# Secrets — never commit real credentials.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Local data / backfill (the 12-month training file lives outside the DB, not in git).
+/data/
+*.parquet
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

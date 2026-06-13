@@ -1,0 +1,16 @@
+# Perps Signal Bot — Python 3.12
+# Phase 0 pins only what the code imports now. Future phases uncomment their
+# deps as they land — see PERPS_SIGNAL_BOT_BUILD_PLAN_NEON.md.
+
+psycopg[binary]>=3.2,<4      # Neon (serverless Postgres) access via the pooled URL
+requests>=2.31,<3            # Telegram Bot API + HTTP data feeds
+
+# Optional, local dev only: auto-load .env (GitHub Actions injects env vars directly).
+# python-dotenv>=1.0,<2
+
+# Phase 2 — indicators / sentiment
+# pandas>=2.2,<3
+# pandas-ta>=0.3.14b0
+
+# Phase 4 — ML classifier (gated behind walk-forward OOS test)
+# lightgbm>=4.3,<5
