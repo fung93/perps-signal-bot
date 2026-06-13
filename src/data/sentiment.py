@@ -1,0 +1,44 @@
+"""Sentiment inputs for the Perps Signal Bot.
+
+Currently the Fear & Greed Index (alternative.me). Funding rate and open interest are
+stubbed pending a venue data source — see :func:`funding_oi`.
+"""
+from __future__ import annotations
+
+import logging
+from datetime import date, datetime, timezone
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+_FNG_URL = "https://api.alternative.me/fng/"
+_TIMEOUT_SECONDS = 15
+
+
+def fear_greed_history(limit: int = 0) -> dict[date, int]:
+    """Return ``{UTC date: Fear & Greed value 0-100}``. ``limit=0`` fetches all history."""
+    resp = requests.get(_FNG_URL, params={"limit": limit}, timeout=_TIMEOUT_SECONDS)
+    resp.raise_for_status()
+    history: dict[date, int] = {}
+    for item in resp.json().get("data", []):
+        day = datetime.fromtimestamp(int(item["timestamp"]), tz=timezone.utc).date()
+        history[day] = int(item["value"])
+    return history
+
+
+def latest_fear_greed() -> int | None:
+    """Most recent Fear & Greed value, or None if unavailable."""
+    history = fear_greed_history(limit=1)
+    return next(iter(history.values()), None)
+
+
+def funding_oi(coin: str) -> tuple[float | None, float | None]:
+    """Funding rate and open interest for ``coin``'s perp — ``(None, None)`` until wired.
+
+    The faithful source is Katana's perps API (the venue actually traded). Binance futures
+    (fapi.binance.com) is geo-blocked from both the dev network here and US-based CI
+    runners, so it is not usable as a proxy. The features table tolerates NULL funding/oi,
+    so the pipeline runs without them in the meantime.
+    """
+    return None, None

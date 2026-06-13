@@ -139,11 +139,12 @@ def _closed(kline: list, now_ms: int) -> bool:
     return int(kline[6]) <= now_ms
 
 
-def fetch_recent(coin: str, timeframe: str, *, limit: int = 200) -> list[Candle]:
+def fetch_recent(coin: str, timeframe: str, *, limit: int = 500) -> list[Candle]:
     """Fetch the most recent **closed** candles for one coin/timeframe.
 
-    A generous overlap (default 200 candles) lets the 15-minute collector self-heal any
-    gaps from missed runs — re-writing existing rows is a harmless upsert.
+    A generous overlap (default 500 candles) lets the 15-minute collector self-heal gaps
+    from missed runs and seeds enough warmup for the slow indicators (e.g. EMA-200).
+    Re-writing existing rows is a harmless upsert.
     """
     symbol, interval = _resolve(coin, timeframe)
     raw = _request_klines(symbol, interval, limit=min(limit, _MAX_LIMIT))

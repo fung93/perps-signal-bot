@@ -1,17 +1,17 @@
-"""Collector entrypoint — ingest recent closed candles into Neon.
+"""Collector entrypoint — ingest recent closed candles, then compute features.
 
 Run by ``collect.yml`` every 15 minutes (and locally for testing):
 
     python -m src.collect
 
-Phase 1 ingests Binance candles only. Later phases extend this same run with indicator
-computation (Phase 2) and signal checks (Phase 3).
+Ingests Binance candles (Phase 1) then computes indicator + sentiment features into the
+features table (Phase 2). Phase 3 will extend this run with the signal check.
 """
 from __future__ import annotations
 
 import logging
 
-from . import config, db
+from . import config, db, features
 from .data import binance
 
 logger = logging.getLogger(__name__)
@@ -63,6 +63,7 @@ def main() -> int:
     )
     try:
         ingest()
+        features.build()
     except Exception:
         logger.exception("collect run failed")
         return 1
