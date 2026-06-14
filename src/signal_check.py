@@ -5,15 +5,20 @@ already-decided candles, score with the rule engine, optionally confirm with the
 model (Phase 4 — a no-op until a model is promoted), size LONG/SHORT with the liquidation
 guard, persist to the signals table, and push a Telegram card for tradeable signals.
 
-Phase 5 hardening: a kill-switch halts all emission, and a per-UTC-day cap limits how many
-tradeable signals are issued. FLAT, ML-vetoed, capped, and risk-rejected setups are logged
-(status SKIPPED) with no card.
+Every decision (FLAT, ML-vetoed, risk-rejected, capped, or tradeable) is logged with a
+``context`` snapshot — the rationale plus the indicator inputs behind it — so a signal is
+self-describing for later review and tuning.
+
+Phase 5 hardening: a kill-switch halts all emission, signals only fire in the local active
+window, and a per-day cap limits how many tradeable signals are issued.
 
     python -m src.signal_check
 """
 from __future__ import annotations
 
 import logging
+
+from psycopg.types.json import Jsonb
 
 from . import config, db
 from .notify import telegram
@@ -33,9 +38,29 @@ _COUNT_TODAY = ("SELECT count(*) FROM signals WHERE direction IN ('LONG', 'SHORT
                 "AND status <> 'SKIPPED' AND created_at >= date_trunc('day', now())")
 _INSERT = """
     INSERT INTO signals
-        (coin, ts, direction, entry, tp, sl, leverage, size_usd, rule_score, model_version, status)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        (coin, ts, direction, entry, tp, sl, leverage, size_usd, rule_score,
+         model_version, status, context)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
+
+
+def _context(decision, snap, atr, ml_p=None) -> dict:
+    """The rationale + indicator inputs behind a decision, stored on the signal row."""
+    return {
+        "rationale": decision.rationale,
+        "score": decision.score,
+        "ml_p": ml_p,
+        "atr": atr,
+        "close": snap.close,
+        "rsi": snap.rsi,
+        "ema_fast": snap.ema_fast,
+        "ema_slow": snap.ema_slow,
+        "ema_long": snap.ema_long,
+        "macd": snap.macd,
+        "macd_signal": snap.macd_signal,
+        "vol_z": snap.vol_z,
+        "funding": snap.funding,
+    }
 
 
 def run() -> int:
@@ -70,7 +95,8 @@ def run() -> int:
                 decision = rules.evaluate(snap)
                 if decision.direction == rules.FLAT:
                     cur.execute(_INSERT, (coin, ts, rules.FLAT, None, None, None, None, None,
-                                          decision.score, rules.MODEL_VERSION, "SKIPPED"))
+                                          decision.score, rules.MODEL_VERSION, "SKIPPED",
+                                          Jsonb(_context(decision, snap, atr))))
                     logger.info("%s FLAT (score %.2f): %s", coin, decision.score, decision.rationale)
                     continue
 
@@ -81,33 +107,37 @@ def run() -> int:
                     logger.exception("ML predict failed; proceeding rules-only")
                     ml_p = None
                 model_version = rules.MODEL_VERSION + ("+ml" if ml_p is not None else "")
+                context = Jsonb(_context(decision, snap, atr, ml_p))
 
                 if ml_p is not None and (
                     (decision.direction == rules.LONG and ml_p < ML_LONG_MIN)
                     or (decision.direction == rules.SHORT and ml_p > ML_SHORT_MAX)
                 ):
                     cur.execute(_INSERT, (coin, ts, decision.direction, snap.close, None, None,
-                                          None, None, decision.score, model_version, "SKIPPED"))
+                                          None, None, decision.score, model_version, "SKIPPED",
+                                          context))
                     logger.info("%s %s vetoed by ML (p=%.2f)", coin, decision.direction, ml_p)
                     continue
 
                 sized = sizing.size(decision.direction, entry=snap.close, atr=atr)
                 if sized.rejected:
                     cur.execute(_INSERT, (coin, ts, decision.direction, snap.close, None, None,
-                                          None, None, decision.score, model_version, "SKIPPED"))
+                                          None, None, decision.score, model_version, "SKIPPED",
+                                          context))
                     logger.info("%s %s rejected: %s", coin, decision.direction, sized.reason)
                     continue
 
                 if emitted_today >= config.MAX_SIGNALS_PER_DAY:
                     cur.execute(_INSERT, (coin, ts, decision.direction, snap.close, None, None,
-                                          None, None, decision.score, model_version, "SKIPPED"))
+                                          None, None, decision.score, model_version, "SKIPPED",
+                                          context))
                     logger.info("%s %s skipped: daily cap %d reached", coin, decision.direction,
                                 config.MAX_SIGNALS_PER_DAY)
                     continue
 
                 cur.execute(_INSERT, (coin, ts, decision.direction, sized.entry, sized.take_profit,
                                       sized.stop_loss, sized.leverage, sized.margin_usd,
-                                      decision.score, model_version, "OPEN"))
+                                      decision.score, model_version, "OPEN", context))
                 emitted_today += 1
                 cards.append(telegram.format_signal_card(coin, decision, sized, ml_p))
                 logger.info("%s %s @ %.2f (score %.2f, %.0fx, ml=%s)", coin, decision.direction,
