@@ -29,4 +29,5 @@ jobs:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          READINESS_MIN_TRADES: ${{ vars.READINESS_MIN_TRADES }}
         run: python -m src.brief

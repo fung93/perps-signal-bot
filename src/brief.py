@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from . import config, db
+from . import config, db, readiness
 from .data import sentiment
 from .notify import telegram
 from .signals import rules
@@ -56,6 +56,11 @@ def main() -> int:
     except Exception:
         logger.exception("daily brief failed")
         return 1
+
+    try:
+        readiness.check_and_notify()
+    except Exception:
+        logger.exception("readiness check failed")
     return 0
 
 
