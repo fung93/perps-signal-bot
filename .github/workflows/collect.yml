@@ -1,11 +1,12 @@
 name: collect
 
 # Ingest recent closed candles into Neon every 15 minutes.
-# GitHub Actions cron is UTC and can drift a few minutes — fine for intraday.
+# GitHub Actions cron is UTC and best-effort — it delays/drops runs at congested times
+# (top of hour, quarter-hours), so we schedule on odd minutes to run more reliably.
 # Scheduled workflows run only on the default branch.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
 
 # Don't let a slow run overlap the next scheduled one.
