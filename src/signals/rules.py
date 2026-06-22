@@ -34,6 +34,7 @@ class Snapshot:
     macd_signal: float | None
     vol_z: float | None
     funding: float | None = None
+    adx: float | None = None
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,7 @@ from .rules import Snapshot
 
 _LATEST = """
     SELECT f.ts, c.close, f.ema_fast, f.ema_slow, f.ema_long,
-           f.rsi, f.macd, f.macd_signal, f.vol_z, f.funding, f.atr
+           f.rsi, f.macd, f.macd_signal, f.vol_z, f.funding, f.atr, f.adx
     FROM features f
     JOIN candles c
       ON c.coin = f.coin AND c.timeframe = f.timeframe AND c.open_time = f.ts
@@ -31,7 +31,7 @@ def load_latest(cur, coin: str, timeframe: str) -> tuple[datetime, Snapshot, flo
     row = cur.fetchone()
     if row is None:
         return None
-    ts, close, ema_fast, ema_slow, ema_long, rsi, macd, macd_signal, vol_z, funding, atr = row
+    ts, close, ema_fast, ema_slow, ema_long, rsi, macd, macd_signal, vol_z, funding, atr, adx = row
     snap = Snapshot(
         close=_f(close),
         ema_fast=_f(ema_fast),
@@ -42,5 +42,6 @@ def load_latest(cur, coin: str, timeframe: str) -> tuple[datetime, Snapshot, flo
         macd_signal=_f(macd_signal),
         vol_z=_f(vol_z),
         funding=_f(funding),
+        adx=_f(adx),
     )
     return ts, snap, _f(atr)

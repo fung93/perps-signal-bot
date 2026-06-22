@@ -60,6 +60,7 @@ def _context(decision, snap, atr, ml_p=None) -> dict:
         "macd_signal": snap.macd_signal,
         "vol_z": snap.vol_z,
         "funding": snap.funding,
+        "adx": snap.adx,
     }
 
 
@@ -98,6 +99,15 @@ def run() -> int:
                                           decision.score, rules.MODEL_VERSION, "SKIPPED",
                                           Jsonb(_context(decision, snap, atr))))
                     logger.info("%s FLAT (score %.2f): %s", coin, decision.score, decision.rationale)
+                    continue
+
+                # Trend-strength gate (backtest-validated: only strong trends clear fees).
+                if snap.adx is None or snap.adx < config.ADX_MIN:
+                    cur.execute(_INSERT, (coin, ts, decision.direction, snap.close, None, None,
+                                          None, None, decision.score, rules.MODEL_VERSION, "SKIPPED",
+                                          Jsonb(_context(decision, snap, atr))))
+                    logger.info("%s %s skipped: weak trend (ADX %s < %.0f)",
+                                coin, decision.direction, snap.adx, config.ADX_MIN)
                     continue
 
                 # Optional ML confirmation (no model -> ml_p is None -> rules-only).

@@ -21,6 +21,7 @@ MACD_SLOW = 26
 MACD_SIGNAL = 9
 ATR_LEN = 14
 VOL_Z_LEN = 20
+ADX_LEN = 14
 
 
 def ema(series: pd.Series, length: int) -> pd.Series:
@@ -64,6 +65,23 @@ def volume_zscore(volume: pd.Series, length: int = VOL_Z_LEN) -> pd.Series:
     return (volume - mean) / std
 
 
+def adx(high: pd.Series, low: pd.Series, close: pd.Series, length: int = ADX_LEN) -> pd.Series:
+    """Wilder's Average Directional Index (0-100) — trend strength, regardless of direction."""
+    up = high.diff()
+    down = -low.diff()
+    plus_dm = ((up > down) & (up > 0)) * up
+    minus_dm = ((down > up) & (down > 0)) * down
+    prev_close = close.shift(1)
+    true_range = pd.concat(
+        [(high - low), (high - prev_close).abs(), (low - prev_close).abs()], axis=1
+    ).max(axis=1)
+    atr_ = true_range.ewm(alpha=1 / length, adjust=False).mean()
+    plus_di = 100 * plus_dm.ewm(alpha=1 / length, adjust=False).mean() / atr_
+    minus_di = 100 * minus_dm.ewm(alpha=1 / length, adjust=False).mean() / atr_
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
+    return dx.ewm(alpha=1 / length, adjust=False).mean()
+
+
 def compute_features(df: pd.DataFrame) -> pd.DataFrame:
     """Compute indicator columns for an ascending-by-open_time candle frame.
 
@@ -83,5 +101,6 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
             "macd_signal": signal_line,
             "atr": atr(high, low, close),
             "vol_z": volume_zscore(volume),
+            "adx": adx(high, low, close),
         }
     )

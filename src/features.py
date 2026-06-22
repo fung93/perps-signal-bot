@@ -27,12 +27,12 @@ _SELECT_CANDLES = (
 _UPSERT_FEATURE = """
     INSERT INTO features
         (coin, timeframe, ts, rsi, ema_fast, ema_slow, ema_long,
-         macd, macd_signal, atr, vol_z, funding, oi, fng)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+         macd, macd_signal, atr, vol_z, adx, funding, oi, fng)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (coin, timeframe, ts) DO UPDATE SET
         rsi=EXCLUDED.rsi, ema_fast=EXCLUDED.ema_fast, ema_slow=EXCLUDED.ema_slow,
         ema_long=EXCLUDED.ema_long, macd=EXCLUDED.macd, macd_signal=EXCLUDED.macd_signal,
-        atr=EXCLUDED.atr, vol_z=EXCLUDED.vol_z, funding=EXCLUDED.funding,
+        atr=EXCLUDED.atr, vol_z=EXCLUDED.vol_z, adx=EXCLUDED.adx, funding=EXCLUDED.funding,
         oi=EXCLUDED.oi, fng=EXCLUDED.fng;
 """
 
@@ -85,6 +85,7 @@ def build() -> int:
                             _clean(feats["macd_signal"].iloc[i]),
                             _clean(feats["atr"].iloc[i]),
                             _clean(feats["vol_z"].iloc[i]),
+                            _clean(feats["adx"].iloc[i]),
                             funding, oi, fng_by_date.get(ts.date()),
                         ))
                         written += 1

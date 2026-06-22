@@ -71,19 +71,7 @@ def _load_all() -> dict[str, dict[str, pd.DataFrame]]:
     return out
 
 
-def _adx(df: pd.DataFrame, length: int = 14) -> pd.Series:
-    """Wilder ADX(14) — trend strength."""
-    high, low, close = df["high"], df["low"], df["close"]
-    up, down = high.diff(), -low.diff()
-    plus_dm = ((up > down) & (up > 0)) * up
-    minus_dm = ((down > up) & (down > 0)) * down
-    tr = pd.concat([(high - low), (high - close.shift()).abs(),
-                    (low - close.shift()).abs()], axis=1).max(axis=1)
-    atr = tr.ewm(alpha=1 / length, adjust=False).mean()
-    plus_di = 100 * plus_dm.ewm(alpha=1 / length, adjust=False).mean() / atr
-    minus_di = 100 * minus_dm.ewm(alpha=1 / length, adjust=False).mean() / atr
-    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
-    return dx.ewm(alpha=1 / length, adjust=False).mean()
+# ADX now lives in indicators/compute.adx (shared with the live pipeline).
 
 
 def _htf_regime(df4h: pd.DataFrame) -> list[tuple]:
@@ -111,7 +99,6 @@ def _prep(df1h: pd.DataFrame, df4h: pd.DataFrame) -> dict:
     """Precompute per-coin arrays: 1h features, ADX, and the 4h regime aligned to 1h time."""
     df = df1h.sort_values("open_time").reset_index(drop=True)
     feats = compute.compute_features(df)
-    adx = _adx(df)
 
     regimes = _htf_regime(df4h)
     htf, j, cur = [], 0, "range"
@@ -133,7 +120,7 @@ def _prep(df1h: pd.DataFrame, df4h: pd.DataFrame) -> dict:
         "ema_slow": col(feats, "ema_slow"), "ema_long": col(feats, "ema_long"),
         "macd": col(feats, "macd"), "macd_signal": col(feats, "macd_signal"),
         "atr": col(feats, "atr"), "vol_z": col(feats, "vol_z"),
-        "adx": [None if pd.isna(v) else float(v) for v in adx],
+        "adx": col(feats, "adx"),
         "htf": htf,
     }
 
