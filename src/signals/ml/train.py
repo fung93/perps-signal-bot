@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 TRAIN_DAYS = 365
 TEST_FRACTION = 0.30
-MIN_AUC = 0.52          # a candidate must clear this (better than random) to be considered
+MIN_AUC = 0.55          # must clearly beat a coin flip; 0.52 auto-promoted a no-edge model
 DATA_DIR = "data"
 
 _LGB_PARAMS = {
