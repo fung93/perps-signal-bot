@@ -1,12 +1,12 @@
 name: collect
 
-# Ingest closed candles into Neon. The RELIABLE trigger is an external cron (cron-job.org)
-# calling this workflow's dispatch API hourly (confirmed firing on time). The schedule below
-# is now just a sparse safety net (every 6h) in case that external cron ever fails — GitHub's
-# own scheduler is best-effort, so it's a backup, not the primary. Schedules run only on `main`.
+# Ingest closed candles into Neon. An external cron (cron-job.org) hits this workflow's
+# dispatch API hourly when healthy — but it can die silently (it did), so this hourly schedule
+# is a REAL fallback, not a token one. GitHub's own scheduler is best-effort and drops runs,
+# which is why the external cron is still preferred. Schedules run only on `main`.
 on:
   schedule:
-    - cron: "7 */6 * * *"
+    - cron: "7 * * * *"
   workflow_dispatch:
 
 # Don't let a slow run overlap the next scheduled one.
