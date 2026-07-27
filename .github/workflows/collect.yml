@@ -37,3 +37,16 @@ jobs:
           MAX_SIGNALS_PER_DAY: ${{ vars.MAX_SIGNALS_PER_DAY }}
           KATANA_API_BASE: ${{ vars.KATANA_API_BASE }}
         run: python -m src.collect
+
+      # Blackouts must be loud: if the run fails (e.g. DB quota exhausted), say so on
+      # Telegram directly — this step needs no database, so it works mid-outage.
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="⚠️ Perps bot: collect run FAILED at $(date -u '+%Y-%m-%d %H:%M') UTC. Check GitHub Actions / Neon quota." \
+            > /dev/null

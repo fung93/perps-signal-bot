@@ -27,30 +27,47 @@ _UPSERT_SQL = """
         volume = EXCLUDED.volume;
 """
 
+# Newest stored candle per series — only rows newer than this (minus a small overlap) need
+# writing. Re-upserting all 500 fetched candles every run wasted Neon's transfer quota.
+_SELECT_MAX = "SELECT coin, timeframe, max(open_time) FROM candles GROUP BY coin, timeframe"
+_OVERLAP_CANDLES = 2
+_INTERVAL_SECONDS = {"15m": 900, "1h": 3600, "4h": 14400}
+
 
 def ingest() -> int:
-    """Fetch recent closed candles for every coin/timeframe and upsert them.
+    """Fetch recent closed candles for every coin/timeframe and upsert the new ones.
 
-    Fetches all series first (network), then writes everything in a single Neon
-    connection to conserve compute-hours. Returns the number of rows written.
+    Fetches all series first (network), then in a single Neon connection reads the newest
+    stored candle per series and writes only rows newer than it (small overlap included).
+    The 500-candle fetch still self-heals gaps: after an outage, everything newer than the
+    stored max gets written. Returns the number of rows written.
     """
-    rows: list[tuple] = []
+    fetched: dict[tuple[str, str], list] = {}
     for coin in config.COINS:
         for timeframe in config.TIMEFRAMES:
             candles = binance.fetch_recent(coin, timeframe)
             logger.info("fetched %d candles for %s %s", len(candles), coin, timeframe)
-            rows.extend(
-                (c.coin, c.timeframe, c.open_time, c.open, c.high, c.low, c.close, c.volume)
-                for c in candles
-            )
-
-    if not rows:
-        logger.warning("no candles fetched; nothing to write")
-        return 0
+            fetched[(coin, timeframe)] = candles
 
     with db.connect() as conn:
         with conn.cursor() as cur:
-            cur.executemany(_UPSERT_SQL, rows)
+            cur.execute(_SELECT_MAX)
+            stored_max = {(r[0], r[1]): r[2] for r in cur.fetchall()}
+
+            rows: list[tuple] = []
+            for (coin, timeframe), candles in fetched.items():
+                prev = stored_max.get((coin, timeframe))
+                if prev is not None:
+                    cutoff_s = _OVERLAP_CANDLES * _INTERVAL_SECONDS[timeframe]
+                    candles = [c for c in candles
+                               if (c.open_time - prev).total_seconds() > -cutoff_s]
+                rows.extend(
+                    (c.coin, c.timeframe, c.open_time, c.open, c.high, c.low, c.close, c.volume)
+                    for c in candles
+                )
+
+            if rows:
+                cur.executemany(_UPSERT_SQL, rows)
     logger.info("upserted %d candle rows", len(rows))
     return len(rows)
 
