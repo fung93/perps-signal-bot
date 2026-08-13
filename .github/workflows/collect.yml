@@ -40,8 +40,9 @@ jobs:
 
       # Blackouts must be loud: if the run fails (e.g. DB quota exhausted), say so on
       # Telegram directly — this step needs no database, so it works mid-outage.
+      # `!cancelled()` keeps concurrency-cancelled runs (grey, harmless) from crying wolf.
       - name: Alert on failure
-        if: failure()
+        if: failure() && !cancelled()
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
