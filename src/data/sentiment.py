@@ -19,13 +19,27 @@ _TIMEOUT_SECONDS = 15
 
 
 def fear_greed_history(limit: int = 0) -> dict[date, int]:
-    """Return ``{UTC date: Fear & Greed value 0-100}``. ``limit=0`` fetches all history."""
-    resp = requests.get(_FNG_URL, params={"limit": limit}, timeout=_TIMEOUT_SECONDS)
-    resp.raise_for_status()
+    """Return ``{UTC date: Fear & Greed value 0-100}``. ``limit=0`` fetches all history.
+
+    Sentiment is enrichment, not core: an API timeout, rate-limit, or maintenance page must
+    never take down candle ingestion or signal generation. On any failure this logs and
+    returns ``{}``, leaving ``features.fng`` NULL for the affected rows.
+    """
+    try:
+        resp = requests.get(_FNG_URL, params={"limit": limit}, timeout=_TIMEOUT_SECONDS)
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+    except (requests.exceptions.RequestException, ValueError) as exc:
+        logger.warning("Fear & Greed fetch failed (%s); fng -> NULL", type(exc).__name__)
+        return {}
+
     history: dict[date, int] = {}
-    for item in resp.json().get("data", []):
-        day = datetime.fromtimestamp(int(item["timestamp"]), tz=timezone.utc).date()
-        history[day] = int(item["value"])
+    for item in data:
+        try:
+            day = datetime.fromtimestamp(int(item["timestamp"]), tz=timezone.utc).date()
+            history[day] = int(item["value"])
+        except (KeyError, TypeError, ValueError):
+            continue  # skip malformed entries rather than failing the run
     return history
 
 

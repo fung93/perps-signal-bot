@@ -44,7 +44,7 @@ def _fetch_tickers():
         resp = requests.get(f"{base.rstrip('/')}{_TICKERS_PATH}", timeout=_TIMEOUT_SECONDS)
         resp.raise_for_status()
         _tickers_cache = resp.json()
-    except requests.exceptions.RequestException as exc:
+    except (requests.exceptions.RequestException, ValueError) as exc:  # ValueError = bad JSON
         logger.warning("Katana tickers fetch failed (%s); funding/OI -> NULL", type(exc).__name__)
         _tickers_cache = None
     return _tickers_cache
