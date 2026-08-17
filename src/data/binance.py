@@ -29,6 +29,10 @@ _KLINES_PATH = "/api/v3/klines"
 _MAX_LIMIT = 1000          # Binance hard cap of klines per request
 _TIMEOUT_SECONDS = 15
 _PAGE_PAUSE_SECONDS = 0.25  # be gentle on the public API when paging a backfill
+_MAX_ATTEMPTS = 3           # full host sweeps before giving up
+_RETRY_BACKOFF_SECONDS = 2.0
+# Statuses worth retrying rather than failing the run: rate limits and server-side hiccups.
+_TRANSIENT_STATUSES = frozenset({418, 429, 500, 502, 503, 504})
 
 # Canonical coin -> Binance spot symbol (USDT pairs = global price discovery).
 _SYMBOLS = {"BTC": "BTCUSDT", "ETH": "ETHUSDT", "SOL": "SOLUSDT"}
@@ -68,10 +72,12 @@ def _candidate_hosts() -> tuple[str, ...]:
 
 
 def _get(path: str, params: dict) -> requests.Response:
-    """GET ``path`` from the first reachable Binance host, falling back on failure.
+    """GET ``path`` from the first reachable Binance host, falling back and retrying.
 
-    Connection errors and HTTP 451 (geo-block) advance to the next host; the first host
-    that works is remembered for the rest of the process.
+    Connection errors, HTTP 451 (geo-block), and transient statuses (rate limit / 5xx)
+    advance to the next host; if every host fails the whole sweep is retried with backoff.
+    A run issues 9 requests in quick succession, so an occasional 429 is expected — it must
+    not kill the run. The first host that works is remembered for the rest of the process.
     """
     global _active_base
     hosts = _candidate_hosts()
@@ -80,23 +86,42 @@ def _get(path: str, params: dict) -> requests.Response:
         ordered = (_active_base, *(h for h in hosts if h != _active_base))
 
     last_error: Exception | None = None
-    for base in ordered:
-        try:
-            resp = requests.get(f"{base}{path}", params=params, timeout=_TIMEOUT_SECONDS)
-        except requests.exceptions.RequestException as exc:
-            last_error = exc
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        for base in ordered:
+            try:
+                resp = requests.get(f"{base}{path}", params=params, timeout=_TIMEOUT_SECONDS)
+            except requests.exceptions.RequestException as exc:
+                last_error = exc
+                logger.warning(
+                    "Binance host %s unreachable (%s); trying next", base, type(exc).__name__
+                )
+                continue
+            if resp.status_code == 451:  # geo-blocked — try the mirror
+                last_error = requests.HTTPError(f"451 geo-block from {base}")
+                logger.warning("Binance host %s returned 451 (geo-block); trying next", base)
+                continue
+            if resp.status_code in _TRANSIENT_STATUSES:  # rate limit / server hiccup
+                last_error = requests.HTTPError(f"{resp.status_code} from {base}")
+                logger.warning(
+                    "Binance host %s returned %d (transient); trying next",
+                    base, resp.status_code,
+                )
+                continue
+            resp.raise_for_status()
+            _active_base = base
+            return resp
+
+        if attempt < _MAX_ATTEMPTS:
+            wait = _RETRY_BACKOFF_SECONDS * attempt
             logger.warning(
-                "Binance host %s unreachable (%s); trying next", base, type(exc).__name__
+                "all Binance hosts failed (attempt %d/%d); retrying in %.1fs",
+                attempt, _MAX_ATTEMPTS, wait,
             )
-            continue
-        if resp.status_code == 451:  # geo-blocked — try the mirror
-            last_error = requests.HTTPError(f"451 geo-block from {base}")
-            logger.warning("Binance host %s returned 451 (geo-block); trying next", base)
-            continue
-        resp.raise_for_status()
-        _active_base = base
-        return resp
-    raise ConnectionError(f"All Binance hosts failed; last error: {last_error}")
+            time.sleep(wait)
+
+    raise ConnectionError(
+        f"All Binance hosts failed after {_MAX_ATTEMPTS} attempts; last error: {last_error}"
+    )
 
 
 def _request_klines(

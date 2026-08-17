@@ -36,7 +36,14 @@ jobs:
           KILL_SWITCH: ${{ vars.KILL_SWITCH }}
           MAX_SIGNALS_PER_DAY: ${{ vars.MAX_SIGNALS_PER_DAY }}
           KATANA_API_BASE: ${{ vars.KATANA_API_BASE }}
-        run: python -m src.collect
+        # One retry after a pause: a transient blip (API rate limit, Neon cold-start spike)
+        # shouldn't skip an hour of data or cry wolf. Only a persistent failure alerts.
+        run: |
+          python -m src.collect || {
+            echo "attempt 1 failed; retrying in 60s"
+            sleep 60
+            python -m src.collect
+          }
 
       # Blackouts must be loud: if the run fails (e.g. DB quota exhausted), say so on
       # Telegram directly — this step needs no database, so it works mid-outage.
