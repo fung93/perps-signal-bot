@@ -4,6 +4,11 @@ name: collect
 # dispatch API hourly when healthy — but it can die silently (it did), so this hourly schedule
 # is a REAL fallback, not a token one. GitHub's own scheduler is best-effort and drops runs,
 # which is why the external cron is still preferred. Schedules run only on `main`.
+#
+# NOTE ON FREQUENCY: hourly is deliberate and must not be increased. Signals are 1h-timeframe,
+# and Neon free tier bills *awake* time — it auto-suspends after ~5 min idle. Triggering more
+# often than every 5 minutes keeps the database awake 24/7 and burns the entire monthly
+# compute-hour allowance in days (this happened on 2026-08-20).
 on:
   schedule:
     - cron: "7 * * * *"
@@ -13,6 +18,10 @@ on:
 concurrency:
   group: collect
   cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read      # the alert step reads recent run conclusions
 
 jobs:
   collect:
@@ -45,16 +54,26 @@ jobs:
             python -m src.collect
           }
 
-      # Blackouts must be loud: if the run fails (e.g. DB quota exhausted), say so on
-      # Telegram directly — this step needs no database, so it works mid-outage.
-      # `!cancelled()` keeps concurrency-cancelled runs (grey, harmless) from crying wolf.
+      # Blackouts must be loud, but only ONCE. During a multi-day outage every run fails;
+      # alerting each time sent hundreds of identical messages (2026-08-20). So alert only on
+      # the transition into failure: if the previous completed run already failed, stay quiet.
+      # This step needs no database, so it still works mid-outage.
       - name: Alert on failure
         if: failure() && !cancelled()
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          prev=$(curl -s -H "Authorization: Bearer ${GH_TOKEN}" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/actions/workflows/collect.yml/runs?status=completed&per_page=1" \
+            | jq -r '.workflow_runs[0].conclusion // "unknown"')
+          echo "previous completed run: ${prev}"
+          if [ "${prev}" = "failure" ]; then
+            echo "outage already reported — staying quiet"
+            exit 0
+          fi
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d text="⚠️ Perps bot: collect run FAILED at $(date -u '+%Y-%m-%d %H:%M') UTC. Log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d text="⚠️ Perps bot: collect is FAILING as of $(date -u '+%Y-%m-%d %H:%M') UTC. You'll get no repeat alerts until it recovers. Log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             > /dev/null

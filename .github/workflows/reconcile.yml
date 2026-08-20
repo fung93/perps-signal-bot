@@ -1,9 +1,10 @@
 name: reconcile
 
-# Grade open signals against the latest candles, hourly (offset off the top of the hour).
+# Grade open signals once daily, just after the active day closes (14:30 UTC = 22:30 MYT).
+# Grading is retrospective bookkeeping, so hourly gained nothing and doubled Neon wake-ups.
 on:
   schedule:
-    - cron: "20 * * * *"
+    - cron: "30 14 * * *"
   workflow_dispatch:
 
 concurrency:
