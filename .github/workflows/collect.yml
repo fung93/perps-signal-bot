@@ -1,20 +1,20 @@
 name: collect
 
 # Ingest closed candles into Neon. An external cron (cron-job.org) hits this workflow's
-# dispatch API hourly when healthy — but it can die silently (it did), so this hourly schedule
-# is a REAL fallback, not a token one. GitHub's own scheduler is best-effort and drops runs,
-# which is why the external cron is still preferred. Schedules run only on `main`.
+# dispatch API when healthy; the hourly schedule below is a real fallback because GitHub's
+# own scheduler is best-effort and drops runs. Schedules run only on `main`.
 #
-# NOTE ON FREQUENCY: hourly is deliberate and must not be increased. Signals are 1h-timeframe,
-# and Neon free tier bills *awake* time — it auto-suspends after ~5 min idle. Triggering more
-# often than every 5 minutes keeps the database awake 24/7 and burns the entire monthly
-# compute-hour allowance in days (this happened on 2026-08-20).
+# FREQUENCY IS LOAD-BEARING. Signals are 1h-timeframe, and Neon's free tier bills *awake*
+# time (it auto-suspends after ~5 min idle). A trigger firing every 5 minutes keeps the
+# database awake 24/7 and burns the whole monthly compute allowance in ~2 days — this
+# happened on 2026-08-19 and cost a 12-day outage. The hour lock below makes the workflow
+# immune to an over-eager trigger: at most ONE ingest per UTC hour reaches the database,
+# no matter how often we are called. Excess runs exit before touching Neon.
 on:
   schedule:
     - cron: "7 * * * *"
   workflow_dispatch:
 
-# Don't let a slow run overlap the next scheduled one.
 concurrency:
   group: collect
   cancel-in-progress: false
@@ -27,17 +27,38 @@ jobs:
   collect:
     runs-on: ubuntu-latest
     steps:
+      - name: Hour key
+        id: k
+        run: echo "hour=$(date -u +%Y%m%d%H)" >> "$GITHUB_OUTPUT"
+
+      # A cache entry keyed on the current UTC hour acts as a lock: if this hour was already
+      # ingested successfully, every later trigger in the same hour skips without a DB connect.
+      - name: Hour lock (restore)
+        id: lock
+        uses: actions/cache/restore@v4
+        with:
+          path: .hourlock
+          key: collect-hour-${{ steps.k.outputs.hour }}
+
+      - name: Skip — hour already ingested
+        if: steps.lock.outputs.cache-hit == 'true'
+        run: echo "UTC hour ${{ steps.k.outputs.hour }} already ingested; skipping without touching Neon."
+
       - uses: actions/checkout@v4
+        if: steps.lock.outputs.cache-hit != 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.lock.outputs.cache-hit != 'true'
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Install dependencies
+        if: steps.lock.outputs.cache-hit != 'true'
         run: pip install -r requirements.txt
 
       - name: Ingest candles
+        if: steps.lock.outputs.cache-hit != 'true'
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -53,6 +74,18 @@ jobs:
             sleep 60
             python -m src.collect
           }
+
+      # Claim the hour only after a successful ingest, so a failed run is retried next trigger.
+      - name: Mark hour done
+        if: success() && steps.lock.outputs.cache-hit != 'true'
+        run: date -u > .hourlock
+
+      - name: Hour lock (save)
+        if: success() && steps.lock.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .hourlock
+          key: collect-hour-${{ steps.k.outputs.hour }}
 
       # Blackouts must be loud, but only ONCE. During a multi-day outage every run fails;
       # alerting each time sent hundreds of identical messages (2026-08-20). So alert only on
@@ -75,5 +108,5 @@ jobs:
           fi
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d text="⚠️ Perps bot: collect is FAILING as of $(date -u '+%Y-%m-%d %H:%M') UTC. You'll get no repeat alerts until it recovers. Log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d text="⚠️ Perps bot: collect is FAILING as of $(date -u '+%Y-%m-%d %H:%M') UTC. No repeat alerts until it recovers. Log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             > /dev/null
