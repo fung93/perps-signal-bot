@@ -43,6 +43,10 @@ def _int_env(name: str, default: int) -> int:
 
 KILL_SWITCH: bool = _flag("KILL_SWITCH")               # when true, emit no signals at all
 MAX_SIGNALS_PER_DAY: int = _int_env("MAX_SIGNALS_PER_DAY", 3)  # cap tradeable signals / day
+# BTC/ETH/SOL move together, so simultaneous same-direction entries are one position at N
+# times the size, not N independent bets (2026-09-03: three LONGs on one candle, all stopped
+# out). Capping at 2 cut max drawdown 23% for identical expectancy in the backtest.
+MAX_SIGNALS_PER_BAR: int = _int_env("MAX_SIGNALS_PER_BAR", 2)  # same-direction cap / candle
 CANDLE_RETENTION_DAYS: int = _int_env("CANDLE_RETENTION_DAYS", 90)  # candles rolling window (prune.py)
 READINESS_MIN_TRADES: int = _int_env("READINESS_MIN_TRADES", 30)  # graded trades before the "data ready" alert
 ADX_MIN: float = float(os.environ.get("ADX_MIN") or 30)  # min ADX trend strength to emit (backtest-validated)

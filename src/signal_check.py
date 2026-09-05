@@ -10,7 +10,8 @@ Every decision (FLAT, ML-vetoed, risk-rejected, capped, or tradeable) is logged 
 self-describing for later review and tuning.
 
 Phase 5 hardening: a kill-switch halts all emission, signals only fire in the local active
-window, and a per-day cap limits how many tradeable signals are issued.
+window, a per-day cap limits how many tradeable signals are issued, and a per-candle cap
+limits same-direction entries across the (highly correlated) coins.
 
     python -m src.signal_check
 """
@@ -36,6 +37,10 @@ ML_SHORT_MAX = 0.55     # veto a SHORT if P rises above this
 _EXISTS = "SELECT 1 FROM signals WHERE coin = %s AND ts = %s LIMIT 1"
 _COUNT_TODAY = ("SELECT count(*) FROM signals WHERE direction IN ('LONG', 'SHORT') "
                 "AND status <> 'SKIPPED' AND created_at >= date_trunc('day', now())")
+# Same-direction signals already live on this candle (earlier coins in this run count too —
+# their inserts are visible inside the transaction).
+_COUNT_AT_TS = ("SELECT count(*) FROM signals WHERE ts = %s AND direction = %s "
+                "AND status <> 'SKIPPED'")
 _INSERT = """
     INSERT INTO signals
         (coin, ts, direction, entry, tp, sl, leverage, size_usd, rule_score,
@@ -143,6 +148,19 @@ def run() -> int:
                                           context))
                     logger.info("%s %s skipped: daily cap %d reached", coin, decision.direction,
                                 config.MAX_SIGNALS_PER_DAY)
+                    continue
+
+                # Correlated-exposure cap. BTC/ETH/SOL move together, so N same-direction
+                # entries on one candle are a single position at N times the size — on
+                # 2026-09-03 three LONGs fired on one candle and all three stopped out.
+                cur.execute(_COUNT_AT_TS, (ts, decision.direction))
+                if cur.fetchone()[0] >= config.MAX_SIGNALS_PER_BAR:
+                    cur.execute(_INSERT, (coin, ts, decision.direction, snap.close, None, None,
+                                          None, None, decision.score, model_version, "SKIPPED",
+                                          context))
+                    logger.info("%s %s skipped: %d %s signal(s) already on candle %s",
+                                coin, decision.direction, config.MAX_SIGNALS_PER_BAR,
+                                decision.direction, ts)
                     continue
 
                 cur.execute(_INSERT, (coin, ts, decision.direction, sized.entry, sized.take_profit,

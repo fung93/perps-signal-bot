@@ -12,8 +12,13 @@ from dataclasses import dataclass
 
 from .. import config
 
-ATR_MULT = 1.5       # stop distance = ATR_MULT * ATR
-REWARD_RISK = 2.0    # take-profit at 2R
+# Backtest-validated (12mo, fee-aware @5bps, walk-forward). A tight stop with a far target
+# beat every wider variant: 1.0xATR->3R gave +0.139R vs +0.101R for the old 1.5xATR->2R, and
+# widening degraded monotonically (2.0x +0.060, 2.5x +0.032, 3.0x +0.030). Out-of-sample,
+# combined with the per-candle cap, it held at +0.116R vs +0.038R for the old settings.
+# Win rate drops (~44% vs ~50%) — fewer, larger wins. Re-validate before changing.
+ATR_MULT = 1.0       # stop distance = ATR_MULT * ATR
+REWARD_RISK = 3.0    # take-profit at 3R
 LIQ_SAFETY = 0.5     # stop must sit within this fraction of the liquidation distance
 
 LONG, SHORT = "LONG", "SHORT"
